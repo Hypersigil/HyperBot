@@ -1,8 +1,9 @@
-based on bubblez irc 0.1
-
+forked from bubblez irc 0.1
+by our very own weekin2day aka khaos156
 
 
 modified for the hypersigil project
 
-dapper 0.1 now henri 0.2a
+formerly dapper 0.1
+now henri 0.2a
 
