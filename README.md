@@ -1,4 +1,8 @@
-bubblez irc 0.1
+based on bubblez irc 0.1
 
-just edit config and run
+
+
+modified for the hypersigil project
+
+dapper 0.1 now henri 0.2a
 
