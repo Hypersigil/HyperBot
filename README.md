@@ -1,5 +1,7 @@
 forked from bubblez irc 0.1
-by our very own weekin2day aka khaos156
+the original DAPPER bot sourcecode
+created by our very own weekin2day
+https://github.com/156
 
 
 modified for the hypersigil project
