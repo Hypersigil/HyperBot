@@ -1,3 +1,5 @@
+# HyperBot 0.2a (henri)
+
 forked from bubblez irc 0.1
 
 the original DAPPER bot sourcecode
