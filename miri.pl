@@ -67,7 +67,7 @@ $realname |= $NAME . " " . $VERSION;
 $ircname |= $NAME . " " . $VERSION;
 $server |= "irc.hypersigil.org";
 $port |= 6667;
-$channels |= "#miritest,#botdev";
+$channels |= "#domus,#botdev";
 
 @channels = split(/ /, $channels);
 
