@@ -4,7 +4,7 @@ the original DAPPER bot sourcecode
 
 created by our very own weekin2day
 
-https://github.com/156/bubblez - source
+https://github.com/156/bubblez - forked source
 
 https://github.com/chorny/AI-MegaHAL - module currently used
 
