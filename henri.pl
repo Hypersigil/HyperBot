@@ -10,16 +10,20 @@
 # based on dapper technology
 # integrated with megahal
 # 
-# Modified 5/14/2015
+# Modified 5/17/2015
 # 
 
-use Getopt::Std;
+#use strict; # strict variables and references, doesnt compile
+use warnings; # warnings
 
+use Getopt::Std;
 use POE;
-use POE::Component::IRC;
+use POE::Component::IRC; # IRC POE
 
 use AI::MegaHAL;
 #use Megahal;
+
+print "Used modules initialized.\n";
 
 getopts('n:r:i:s:p:c:h');
 
@@ -50,13 +54,13 @@ $server = $opt_s;
 $port = $opt_p;
 $channels = $opt_c;
 
-#$nickname |= ($NAME . $$ );
+#$nickname |= ($NAME . $$ ); # orignal line, name + random number
 $nickname |= ($NAME);
 $realname |= $NAME . " " . $VERSION;
 $ircname |= $NAME . " " . $VERSION;
 $server |= "irc.hypersigil.org";
 $port |= 6667;
-$channels |= "#domus,#botdev";
+$channels |= "#botdev";
 
 @channels = split(/ /, $channels);
 
@@ -82,6 +86,7 @@ POE::Session->create(
 
 sub bot_start
 {
+  print "Bot started.\n";
   $irc->yield(register => "all");
 
   $irc->yield(
@@ -95,15 +100,24 @@ sub bot_start
   );
 }
 
-sub on_connect {  foreach (@channels) { $irc->yield('join', $_ ); } }
+sub on_connect 
+{  
+	print "Connection established.\n";
+	foreach (@channels) 
+	{ 
+		$irc->yield('join', $_ ); 
+		print "Joining channel: $_ \n";
+	} 
+}
 
 sub doping
 {
-    my ( $kernel, $heap ) = @_[ KERNEL, HEAP ];
+	print "Ping received?";
+	my ( $kernel, $heap ) = @_[ KERNEL, HEAP ];
 
-    $kernel->post( bot => userhost => $config->{nickname} )unless $heap->{seen_traffic};
-    $heap->{seen_traffic} = 0;
-    $kernel->delay( autoping => 300 );
+	$kernel->post( bot => userhost => $config->{nickname} )unless $heap->{seen_traffic};
+	$heap->{seen_traffic} = 0;
+	$kernel->delay( autoping => 200 );
 }
 
 sub tryreconnect
@@ -117,60 +131,63 @@ sub tryreconnect
 
 sub on_public
 {
-  my ($kernel, $who, $where, $msg) = @_[KERNEL, ARG0, ARG1, ARG2];
-  my $nick    = (split /!/, $who)[0];
-  my $channel = $where->[0];
-  my $ts      = scalar localtime;
+	print "On Public triggered.\n";
+	my ($kernel, $who, $where, $msg) = @_[KERNEL, ARG0, ARG1, ARG2];
+	my $nick    = (split /!/, $who)[0];
+	
+	my $channel = $where->[0];
+	my $ts      = scalar localtime;
   
-  my $hadnick = 0;
+	my $hadnick = 0;
   
-  if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; }
+	if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; }
 
-  if ($msg =~ /^\.loadresponses/) { @responses = (); open FD, "brain.txt"; while (<FD>) { chomp; push @responses, $_; } close FD; }
-  if ($msg =~ /^\.saveresponses/) { open FD, ">brain.txt"; foreach my $r (@responses) { print FD "$r\n"; } close (FD); }
+	if ($msg =~ /^\.loadresponses/) { @responses = (); open FD, "brain.txt"; while (<FD>) { chomp; push @responses, $_; } close FD; }
+	if ($msg =~ /^\.saveresponses/) { open FD, ">brain.txt"; foreach my $r (@responses) { print FD "$r\n"; } close (FD); }
   
-  if (my ($msgstring) = $msg =~ /^\.addresponse (.*)/) { push @responses, $msgstring; return; }
+	if (my ($msgstring) = $msg =~ /^\.addresponse (.*)/) { push @responses, $msgstring; return; }
 
-#  if ($msg =~ /.time/) { $irc->yield(privmsg =>$channel, `date`); return; }
-#  if ($msg =~ /.date/) { $irc->yield(privmsg =>$channel, `date`); return; }
+	#if ($msg =~ /.time/) { $irc->yield(privmsg =>$channel, `date`); return; }
+	#if ($msg =~ /.date/) { $irc->yield(privmsg =>$channel, `date`); return; }
   
-  my @output = ();
-  my $doresponse = 0;
+	my @output = ();
+	my $doresponse = 0;
 
-  # must be language
+	# must be language
   
-  $megahal->learn($msg);
+	$megahal->learn($msg);
   
-  AI::MegaHAL::megahal_cleanup();
+	AI::MegaHAL::megahal_cleanup();
   
-  if ($hadnick)
-  {
-  foreach my $response (@responses)
-  {
-   # my ($m, $f, $v) = split(/:/, $response);
-    if ($response =~ /(\S+)\:(\S+)\:(.*)/)
-    {
-      my $m=$1;
-      my $f=$2;
-      my $v=$3;
+	if ($hadnick)
+	{
+	foreach my $response (@responses)
+	{
+	# my ($m, $f, $v) = split(/:/, $response);
+	if ($response =~ /(\S+)\:(\S+)\:(.*)/)
+	{
+		my $m=$1;
+		my $f=$2;
+		my $v=$3;
       
-      if ($msg =~ /$m/) {
-        if ($f eq "text")
-        {
-          push @output, $v;
-          $doresponse=1;
-        }
-         if ($f eq "markov")
-        {
-          push @output, $megahal->do_reply($v);
-          $doresponse=1;
-        }
-      }
-    }
+		if ($msg =~ /$m/) {
+			if ($f eq "text")
+			{
+				push @output, $v;
+				$doresponse=1;
+			}
+			if ($f eq "markov")
+			{
+				push @output, $megahal->do_reply($v);
+				$doresponse=1;
+			}
+		}
+	}
   }
   
   if ($doresponse)
   {
+	print "Force Response.\n";
     $irc->yield(privmsg => $channel, $output[rand @output]);
     return;
   }
