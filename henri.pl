@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 #
+# Version 0.2.1a
 # henri chain irc bot
 # Modified from original source by 
 # The HYPERSIGIL PROJECT
@@ -17,6 +18,7 @@
 use warnings; # warnings
 
 use Getopt::Std;
+
 use POE;
 use POE::Component::IRC; # IRC POE
 
