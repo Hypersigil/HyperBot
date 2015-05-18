@@ -1,4 +1,6 @@
-# HyperBot 0.2a (henri)
+# HyperBot 0.2.1a (henri)
+
+# HyperBot 0.3.0a (miri)
 
 forked from bubblez irc 0.1
 
