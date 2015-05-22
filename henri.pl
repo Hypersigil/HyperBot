@@ -11,7 +11,7 @@
 # based on dapper technology
 # integrated with megahal
 # 
-# Modified 5/17/2015
+# Modified 5/20/2015
 # 
 
 #use strict; # strict variables and references, doesnt compile
@@ -19,13 +19,14 @@
 
 use Getopt::Std;
 
-use POE; # requires POE, apt-get install libpoe-perl
-use POE::Component::IRC; # IRC POE
+#use POE; # requires POE, apt-get install libpoe-perl
+#use POE::Component::IRC; # IRC POE
+use POE qw(Component::IRC);
 
 use AI::MegaHAL; # requires AI-MegaHAL perl module
 #use Megahal; # tried to use normal Megahal install to no avail
 
-print("Used modules initialized.\n");
+print("core_notice: Used modules initialized.\n");
 
 getopts('n:r:i:s:p:c:h');
 
@@ -49,6 +50,9 @@ my $port;
 my @channels;
 my $channels;
 
+# text stuff
+my $t_convert;
+
 $nickname = $opt_n;
 $realname = $opt_r;
 $ircname = $opt_i;
@@ -62,36 +66,47 @@ $realname |= $NAME . " " . $VERSION;
 $ircname |= $NAME . " " . $VERSION;
 $server |= "irc.hypersigil.org";
 $port |= 6667;
-$channels |= "#botdev";
+$channels |= "#domus";
 
 @channels = split(/ /, $channels);
 
 # megahal # AI::MegaHAL or Megahal
 $megahal = AI::MegaHAL->new('Path' => $brainpath, 'Prompt' => 0, 'Wrap' => 0, 'AutoSave' => $brainsave);
 
-print("Config Complete.\n");
+print("core_notice: Config Complete.\n");
 
 #irc
-print("Spawn IRC Component.\n");
+print("core_notice: Spawn IRC Component.\n");
 $irc = POE::Component::IRC->spawn();
 
 # create poe session
 POE::Session->create(
-	inline_states => {
-		_start     => \&bot_start,
-		irc_001    => \&on_connect,
-		irc_public => \&on_public,
-		irc_disconnected => \&tryreconnect,
-		irc_error        => \&tryreconnect,
-		irc_socketerr    => \&tryreconnect,
-		autoping         => \&doping,
+	package_states => [
+         main => [ qw(
+		_default 
+		_start 
+		irc_001 
+		irc_public 
 
-	},
+		) ],
+     ],
+	#inline_states => {
+		#_start     => \&bot_start,
+		#irc_001    => \&on_connect,
+		#irc_public => \&on_public,
+		#irc_disconnected => \&tryreconnect,
+		#irc_error        => \&tryreconnect,
+		#irc_socketerr    => \&tryreconnect,
+		#autoping         => \&doping,
+
+	#},
+	heap => { irc => $irc }, # not used yet, need to implement
 );
 
-sub bot_start
+#sub bot_start
+sub _start
 {
-	print("Bot started.\n");
+	print("core_notice: Bot started.\n");
 	$irc->yield(register => "all");
 
 	$irc->yield(
@@ -101,13 +116,15 @@ sub bot_start
 			Ircname  => $ircname,
 			Server   => $server,
 			Port     => $port,
+			Raw      => 1,
 		}
 	);
 }
 
-sub on_connect 
+#sub on_connect 
+sub irc_001
 {  
-	print("Connection established.\n");
+	print("core_notice: Connection established.\n");
 	foreach (@channels) 
 	{ 
 		$irc->yield('join', $_ ); 
@@ -115,9 +132,15 @@ sub on_connect
 	} 
 }
 
-sub doping
+#sub doping
+#sub irc_ping
+sub thisisntworkingyet
 {
-	print("DoPing received?\n");
+	print("core_notice: Ping received: $_ \n"); 
+	# is never called via first gen code??
+	# tried to fix this
+
+	$irc->yield(quote => 'PONG :hypersigil.org'); # try this
 	my ( $kernel, $heap ) = @_[ KERNEL, HEAP ];
 
 	$kernel->post( bot => userhost => $config->{nickname} )unless $heap->{seen_traffic};
@@ -125,18 +148,23 @@ sub doping
 	$kernel->delay( autoping => 200 );
 }
 
-sub tryreconnect
+sub tryreconnect #sub irc_disconnected
 {
-	print("Try Reconnect?\n");
+	print("core_notice: Try Reconnect?\n");
 	my ( $kernel, $heap ) = @_[ KERNEL, HEAP ];
 
 	$kernel->delay( autoping => undef );
 	$kernel->delay( connect  => 15 );
 }
 
-sub on_public
+#sub on_public
+sub irc_public
 {
-	print("On Public triggered.\n");
+	print("core_notice: On Public triggered.\n");
+	$irc->yield(quote => 'PONG :hypersigil.org'); # this
+	#$irc->yield('quote', 'PONG :hypersigil.org'); # or this?
+	# these both work the same but idk if theyre helping
+
 	my ($kernel, $who, $where, $msg) = @_[KERNEL, ARG0, ARG1, ARG2];
 	my $nick    = (split /!/, $who)[0];
 	
@@ -145,7 +173,7 @@ sub on_public
   
 	my $hadnick = 0;
   
-	if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; print("Heard nickname?\n");}
+	if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; print("core_notice: Heard nickname?\n");}
 
 	if ($msg =~ /^\.loadresponses/) { @responses = (); open FD, "brain.txt"; while (<FD>) { chomp; push @responses, $_; } close FD; }
 	if ($msg =~ /^\.saveresponses/) { open FD, ">brain.txt"; foreach my $r (@responses) { print FD "$r\n"; } close (FD); }
@@ -167,7 +195,7 @@ sub on_public
   
 	if ($hadnick)
 	{
-		print("Heard nickname, responding!\n");
+		print("core_notice: Heard nickname, responding!\n");
 		foreach my $response (@responses)
 	{
 
@@ -201,13 +229,33 @@ if ($doresponse)
 	return;
 }
   
-# everything else has failed
-print("All else failed.\n");
-$irc->yield(privmsg => $channel, $megahal->do_reply($msg));
+# everything else has failed # failed or passed? lol
+print("core_notice: All checks passed: do_reply($msg)\n");
+
+$t_convert = lc $megahal->do_reply($msg);
+
+#$irc->yield(privmsg => $channel, $megahal->do_reply($msg));
+$irc->yield(privmsg => $channel, $t_convert);
   
 }
 }
-print("Running POE Kernel.\n");
+print("core_notice: Running POE Kernel.\n");
 $poe_kernel->run();
+
+sub _default {
+	my ($event, $args) = @_[ARG0 .. $#_];
+	my @output = ( "$event: " );
+
+	for my $arg (@$args) {
+		if ( ref $arg eq 'ARRAY' ) {
+			push( @output, '[' . join(', ', @$arg ) . ']' );
+		}
+		else {
+			push ( @output, "'$arg'" );
+		}
+	}
+	print join ' ', @output, "\n";
+	return;
+ }
 
 exit 0;
