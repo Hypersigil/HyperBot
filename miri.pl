@@ -22,9 +22,12 @@ use POE::Component::IRC;
 use AI::MegaHAL;
 #use Megahal;
 
+use URI;
 use HTML::Strip;
 use WWW::Mechanize;
 require URI::Find;
+use HTML::LinkExtractor;
+use LWP::Simple qw($ua head);
 
 getopts('n:r:i:s:p:c:h');
 
@@ -52,7 +55,9 @@ my $channels;
 my $htmlstrip = HTML::Strip->new();
 my $mech = WWW::Mechanize->new();
 my $uri_finder = URI::Find->new(\&strip_html);
+my $uri_recurse = URI::Find->new(\&recurse_html);
 $mech->agent("Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.152 Safari/537.36");
+my $LX = new HTML::LinkExtractor();
 
 $nickname = $opt_n;
 $realname = $opt_r;
@@ -131,12 +136,15 @@ sub tryreconnect
 sub on_public
 {
   my ($kernel, $who, $where, $msg) = @_[KERNEL, ARG0, ARG1, ARG2];
-  # read any websites linked to
-  
-  
-  if($msg =~ /^\.read.*$/){  $uri_finder->find(\$msg,\&recurse_html);$irc->yield(privmsg => $where->[0], "Done reading"); } else{ $uri_finder->find(\$msg); }
-  
   my $nick    = (split /!/, $who)[0];
+  # read any websites linked to
+  # except by people who are... prone to abusing the bot
+  if(lc($nick) ne "assbutt"){
+	if($msg =~ /^\.read.*$/){  $uri_recurse->find(\$msg);$irc->yield(privmsg => $where->[0], "Done reading"); } else{ $uri_finder->find(\$msg); }
+  }
+#$uri_finder->find(\$msg);  
+  
+  
   my $channel = $where->[0];
   my $ts      = scalar localtime;
   
@@ -161,8 +169,7 @@ sub on_public
   
   AI::MegaHAL::megahal_cleanup();
   
-  # Random chat factor
-  if(rand(222) > 220) {$irc->yield(privmsg => $channel, $megahal->do_reply($msg));}
+  if(rand(222) > 220) {$irc->yield(privmsg => $channel, lc($megahal->do_reply($msg)));}
   
   
   if ($hadnick)
@@ -184,7 +191,7 @@ sub on_public
         }
          if ($f eq "markov")
         {
-          push @output, $megahal->do_reply($v);
+          push @output, lc($megahal->do_reply($v));
           $doresponse=1;
         }
       }
@@ -199,7 +206,7 @@ sub on_public
   }
   
   # everything else has failed
-  $irc->yield(privmsg => $channel, $megahal->do_reply($msg));
+  $irc->yield(privmsg => $channel, lc($megahal->do_reply($msg)));
   
   }
 }
@@ -210,24 +217,68 @@ sub strip_html
   print STDOUT "Reading: ";
   my $url = $_[0];
   print STDOUT $url;
-  if($url != ''){
-    $mech->get($url);
-	$megahal->learn($htmlstrip->parse($mech->content()));
-    AI::MegaHAL::megahal_cleanup();
+  print STDOUT "\n";
+  #anti MRA-bot
+  my $turl = lc($url);
+  if($turl =~ /.*reddit.*/){ print STDOUT 'reddit fail\n\n'; return; };
+  if($turl =~ /.*\.jpg$/){ print STDOUT 'jpg fail\n\n'; return; };
+  if($turl =~ /.*\.jpeg$/){ print STDOUT 'jpeg fail\n\n'; return; };
+  if($turl =~ /.*\.gif$/){ print STDOUT 'gif fail\n\n'; return; };
+  if($turl =~ /.*\.png$/){ print STDOUT 'png fail\n\n'; return; };
+  if($turl =~ /.*\.zip$/){ print STDOUT 'zip fail\n\n'; return; };
+  if($turl =~ /.*\.pdf$/){ print STDOUT 'pdf fail\n\n'; return; };
+  if($turl !~ /^http.*$/){ print STDOUT 'http fail\n\n'; return; };
+
+  if($url ne ''){
+	if(head($url)){
+		print STDOUT "Got URL\n\n";
+		$mech->get($url) or return;
+		$megahal->learn($htmlstrip->parse($mech->content()));
+		AI::MegaHAL::megahal_cleanup();
+	}
   }
 }
 
 sub recurse_html
 {
-  print STDOUT "Reading: ";
+  print STDOUT "Recursive Reading: ";
   my $url = $_[0];
-  print STDOUT $url;
-  if($url != ''){
-    $mech->get($url);
+  print STDOUT "$url\n\n";
+  #anti MRA-bot
+  my $turl = lc($url);
+  if($turl =~ /.*reddit.*/){ print STDOUT 'reddit fail\n\n'; return; };
+  if($turl =~ /.*\.jpg$/){ print STDOUT 'jpg fail\n\n'; return; };
+  if($turl =~ /.*\.jpeg$/){ print STDOUT 'jpeg fail\n\n'; return; };
+  if($turl =~ /.*\.gif$/){ print STDOUT 'gif fail\n\n'; return; };
+  if($turl =~ /.*\.png$/){ print STDOUT 'png fail\n\n'; return; };
+  if($turl =~ /.*\.zip$/){ print STDOUT 'zip fail\n\n'; return; };
+  if($turl =~ /.*\.pdf$/){ print STDOUT 'pdf fail\n\n'; return; };
+  if($turl !~ /^http.*$/){ print STDOUT 'http fail\n\n'; return; };
+  
+  if(head($url)){
+	print STDOUT "Got URL\n\n";
+	$mech->get($url) or return;
 	my $content = $mech->content();
+	$LX->parse(\$content);
+
+	for my $Link( @{ $LX->links } ) {
+		my $tempurl = $$Link{href};
+		print STDOUT "TempURL: $tempurl\n";
+		if($tempurl =~ /^http.*/){
+			print STDOUT "Found absolute\n\n";
+			if(head($tempurl)){
+				strip_html($tempurl);
+			}
+		}else{
+			my $uri = URI->new_abs($tempurl,$url);
+			print STDOUT "Found relative: ".$uri->canonical."\n\n";
+			if(head($uri->canonical)){
+				strip_html($uri->canonical);
+			}
+		}
+	}
 	$megahal->learn($htmlstrip->parse($content));
     AI::MegaHAL::megahal_cleanup();
-	$uri_finder->find(\$content);
   }
 }
 
