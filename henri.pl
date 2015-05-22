@@ -21,7 +21,7 @@ use Getopt::Std;
 
 #use POE; # requires POE, apt-get install libpoe-perl
 #use POE::Component::IRC; # IRC POE
-use POE qw(Component::IRC);
+use POE qw(Component::IRC Component::IRC::Plugin::Connector Component::IRC::Plugin::Console);
 
 use AI::MegaHAL; # requires AI-MegaHAL perl module
 #use Megahal; # tried to use normal Megahal install to no avail
@@ -66,7 +66,9 @@ $realname |= $NAME . " " . $VERSION;
 $ircname |= $NAME . " " . $VERSION;
 $server |= "irc.hypersigil.org";
 $port |= 6667;
-$channels |= "#domus";
+#$channels |= "#domus,#botdev";
+#$channels |= "#domus";
+$channels |= "#botdev";
 
 @channels = split(/ /, $channels);
 
@@ -80,14 +82,14 @@ print("core_notice: Spawn IRC Component.\n");
 $irc = POE::Component::IRC->spawn();
 
 # create poe session
+# additional flags irc_ping, _default, lag_o_meter
 POE::Session->create(
 	package_states => [
          main => [ qw(
-		_default 
 		_start 
 		irc_001 
 		irc_public 
-
+		lag_o_meter 
 		) ],
      ],
 	#inline_states => {
@@ -107,7 +109,12 @@ POE::Session->create(
 sub _start
 {
 	print("core_notice: Bot started.\n");
+	my ($kernel, $heap) = @_[KERNEL ,HEAP];
 	$irc->yield(register => "all");
+	$irc->yield(debug => 1);
+	$heap->{connector} = POE::Component::IRC::Plugin::Connector->new();
+
+	$irc->plugin_add( 'Connector' => $heap->{connector} );
 
 	$irc->yield(
 		connect => {
@@ -116,7 +123,10 @@ sub _start
 			Ircname  => $ircname,
 			Server   => $server,
 			Port     => $port,
-			Raw      => 1,
+			debug    => 1,
+#			Raw      => 1,	# uncomment for RAW PROTOCOL
+# if uncommented i recommend to comment debug as same protocol is
+# shown
 		}
 	);
 }
@@ -128,7 +138,7 @@ sub irc_001
 	foreach (@channels) 
 	{ 
 		$irc->yield('join', $_ ); 
-		print "Joining channel: $_ \n";
+		print("core_notice: Joining channel: $_ \n");
 	} 
 }
 
@@ -173,7 +183,7 @@ sub irc_public
   
 	my $hadnick = 0;
   
-	if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; print("core_notice: Heard nickname?\n");}
+	if ($msg =~ /$nickname/) { $msg =~ s/$nickname //g; $msg =~ s/$nickname//g; $hadnick = 1; print("core_notice: Heard nickname!\n");}
 
 	if ($msg =~ /^\.loadresponses/) { @responses = (); open FD, "brain.txt"; while (<FD>) { chomp; push @responses, $_; } close FD; }
 	if ($msg =~ /^\.saveresponses/) { open FD, ">brain.txt"; foreach my $r (@responses) { print FD "$r\n"; } close (FD); }
@@ -189,7 +199,7 @@ sub irc_public
 	# must be language
   
 	$megahal->learn($msg);
-	print "String learned by MegaHAL.\n";
+	print("core_notice: String learned by MegaHAL.\n");
   
 	AI::MegaHAL::megahal_cleanup();
   
@@ -239,8 +249,6 @@ $irc->yield(privmsg => $channel, $t_convert);
   
 }
 }
-print("core_notice: Running POE Kernel.\n");
-$poe_kernel->run();
 
 sub _default {
 	my ($event, $args) = @_[ARG0 .. $#_];
@@ -256,6 +264,16 @@ sub _default {
 	}
 	print join ' ', @output, "\n";
 	return;
+}
+
+sub lag_o_meter {
+	my ($kernel,$heap) = @_[KERNEL,HEAP];
+	print('Time: ' . time() . ' Lag: ' . $heap->{connector}->lag() . "\n");
+	$kernel->delay( 'lag_o_meter' => 60 );
+	return;
  }
+
+print("core_notice: Running POE Kernel.\n");
+$poe_kernel->run();
 
 exit 0;
